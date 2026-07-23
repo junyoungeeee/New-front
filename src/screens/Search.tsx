@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { averageRating, db, type Product, type Review } from '../db/db';
+import { type Product } from '../db/db';
+import { useProducts, useReviewStats } from '../db/queries';
 import { ReceiptHeader, ReceiptScreen, StarRating } from '../design/ReceiptScreen';
 import { DottedLine, PerforationLine, ReceiptPaper } from '../design/parts';
 import { Icon } from '../design/Icon';
@@ -23,13 +23,13 @@ export function Search() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
 
-  const products = useLiveQuery(() => db.products.toArray(), [], [] as Product[]);
-  const reviews = useLiveQuery(() => db.reviews.toArray(), [], [] as Review[]);
+  const { data: products = [] } = useProducts();
 
   const results = useMemo(
-    () => products.filter((product) => match(product, query)),
+    () => products.filter((product: Product) => match(product, query)),
     [products, query],
   );
+  const { data: stats } = useReviewStats(results.map((p: Product) => p.barcode));
 
   return (
     <ReceiptScreen>
@@ -79,18 +79,13 @@ export function Search() {
                   className="search-row"
                   onClick={() => navigate(`/p/${product.barcode}`)}
                 >
-                  <ProductPhoto barcode={product.barcode} width={54} height={54} radius={6} />
+                  <ProductPhoto path={product.photoPath} width={54} height={54} radius={6} />
                   <span className="body">
                     <span className="field-label">{product.category}</span>
                     <span className="name">{product.name}</span>
                     <span className="rating">
-                      <StarRating
-                        rating={averageRating(reviews.filter((r) => r.barcode === product.barcode))}
-                        size={11}
-                      />
-                      <span className="mono">
-                        ({reviews.filter((r) => r.barcode === product.barcode).length})
-                      </span>
+                      <StarRating rating={stats?.get(product.barcode)?.average ?? 0} size={11} />
+                      <span className="mono">({stats?.get(product.barcode)?.count ?? 0})</span>
                     </span>
                   </span>
                   <Icon name="chevron.right" size={14} color="var(--icon-pink)" />

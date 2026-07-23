@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { averageRating, db, shortRelative, type Review } from '../db/db';
+import { averageRating, shortRelative, type Review } from '../db/db';
+import { useProduct, useReviews } from '../db/queries';
 import { ReceiptScreen, StarRating } from '../design/ReceiptScreen';
 import { DottedLine, PerforationLine, ReceiptPaper } from '../design/parts';
 import { Icon } from '../design/Icon';
@@ -11,16 +11,8 @@ export function ProductPage() {
   const { barcode = '' } = useParams();
   const navigate = useNavigate();
 
-  // undefined = 아직 조회 중, null = 없는 제품. Dexie 는 둘 다 undefined 로 주므로 구분해준다.
-  const product = useLiveQuery(async () => (await db.products.get(barcode)) ?? null, [barcode]);
-  const reviews = useLiveQuery(
-    async () => {
-      const rows = await db.reviews.where('barcode').equals(barcode).toArray();
-      return rows.sort((a, b) => b.createdAt - a.createdAt);
-    },
-    [barcode],
-    [] as Review[],
-  );
+  const { data: product } = useProduct(barcode);
+  const { data: reviews = [] } = useReviews(barcode);
 
   if (product === undefined) {
     return (
@@ -73,7 +65,7 @@ export function ProductPage() {
           <PerforationLine />
           <div style={{ height: 26 }} />
 
-          <ProductPhoto barcode={product.barcode} height={175} />
+          <ProductPhoto path={product.photoPath} height={175} />
 
           <div style={{ height: 22 }} />
           <div style={{ fontSize: 18, fontWeight: 500, color: 'var(--pink)' }}>{product.name}</div>

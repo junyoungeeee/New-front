@@ -16,5 +16,10 @@ TestResults.xcresult/
 /*.jpg
 /*.png
 
+# 환경 변수 (키가 들어간다)
+.env
+.env.*
+!.env.example
+
 # 타입체크 캐시
 *.tsbuildinfo

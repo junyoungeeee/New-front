@@ -7,7 +7,6 @@ import { NotFound } from './screens/NotFound';
 import { ProductPhotoScreen } from './screens/ProductPhoto';
 import { RegisterReview } from './screens/RegisterReview';
 import { Search } from './screens/Search';
-import { InstallHint } from './screens/InstallHint';
 
 export function App() {
   return (
@@ -23,7 +22,6 @@ export function App() {
         <Route path="/p/:barcode/write" element={<RegisterReview />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <InstallHint />
     </BrowserRouter>
   );
 }

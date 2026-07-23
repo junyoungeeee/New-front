@@ -1,14 +1,15 @@
-import Dexie, { type Table } from 'dexie';
+import { PHOTO_BUCKET, ensureSession, photoUrl, supabase } from '../lib/supabase';
 
 export const CATEGORIES = ['라면', '과자', '음료', '아이스크림', '커피', '기타'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export interface Product {
-  /** 자연키. UUID 를 주키로 두면 나중에 서버를 붙일 때 같은 제품이 사람마다
-   *  다른 행으로 생겨 병합이 지옥이 된다. */
+  /** 자연키. UUID 를 주키로 두면 같은 제품이 사람마다 다른 행으로 생겨 병합이 지옥이 된다. */
   barcode: string;
   name: string;
   category: Category;
+  /** 스토리지 객체 키 또는 정적 경로. 화면에서는 `photoUrl()` 로 주소를 만든다. */
+  photoPath: string | null;
   /** 배경 제거가 실제로 성공했는지. 폴백으로 처리된 사진을 나중에 다시 찾기 위한 표시. */
   photoIsCutout: boolean;
   createdAt: number;
@@ -23,45 +24,107 @@ export interface Review {
   createdAt: number;
 }
 
-/** 누끼 PNG 는 2000px 안팎이라 products 와 같은 스토어에 두면 목록 조회마다
- *  수 MB 를 역직렬화하게 된다. 스토어를 분리해 목록 쿼리가 blob 을 건드리지 않게 한다.
- *  키를 바코드로 통일해 두면 나중에 그대로 오브젝트 스토리지 키가 된다. */
-export interface Photo {
+// ─── 행 ↔ 모델 ───
+// DB 는 snake_case + ISO 시각, 화면은 camelCase + epoch ms 를 쓴다. 변환을 여기서만 한다.
+
+interface ProductRow {
   barcode: string;
-  blob: Blob;
+  name: string;
+  category: string;
+  photo_path: string | null;
+  photo_is_cutout: boolean;
+  created_at: string;
 }
 
-class NewDB extends Dexie {
-  products!: Table<Product, string>;
-  reviews!: Table<Review, string>;
-  photos!: Table<Photo, string>;
-
-  constructor() {
-    super('new-app');
-    this.version(1).stores({
-      products: 'barcode, category, createdAt',
-      reviews: 'id, barcode, createdAt',
-      photos: 'barcode',
-    });
-    // 클래스 필드 선언(useDefineForClassFields)이 super() 직후 실행되면서 Dexie 가 만들어 둔
-    // 테이블 프로퍼티를 undefined 로 덮어쓴다. 생성자 본문에서 다시 물려야 한다.
-    this.products = this.table('products');
-    this.reviews = this.table('reviews');
-    this.photos = this.table('photos');
-  }
+interface ReviewRow {
+  id: string;
+  barcode: string;
+  rating: number;
+  body: string;
+  keywords: string[];
+  created_at: string;
 }
 
-export const db = new NewDB();
+const toProduct = (row: ProductRow): Product => ({
+  barcode: row.barcode,
+  name: row.name,
+  category: row.category as Category,
+  photoPath: row.photo_path,
+  photoIsCutout: row.photo_is_cutout,
+  createdAt: Date.parse(row.created_at),
+});
+
+const toReview = (row: ReviewRow): Review => ({
+  id: row.id,
+  barcode: row.barcode,
+  rating: row.rating,
+  body: row.body,
+  keywords: row.keywords ?? [],
+  createdAt: Date.parse(row.created_at),
+});
+
+/** Supabase 오류는 조용히 넘기면 화면이 빈 채로 멈춘다. 던져서 React Query 가 잡게 한다. */
+function unwrap<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
+  if (error) throw new Error(error.message);
+  return data as T;
+}
 
 // ─── 조회 ───
 
-export async function getProduct(barcode: string) {
-  return db.products.get(barcode);
+export async function listProducts(): Promise<Product[]> {
+  const rows = unwrap(await supabase.from('products').select('*'));
+  return (rows as ProductRow[]).map(toProduct);
 }
 
-export async function reviewsOf(barcode: string) {
-  const rows = await db.reviews.where('barcode').equals(barcode).toArray();
-  return rows.sort((a, b) => b.createdAt - a.createdAt);
+export async function listByCategory(category: string): Promise<Product[]> {
+  const rows = unwrap(
+    await supabase
+      .from('products')
+      .select('*')
+      .eq('category', category)
+      .order('created_at', { ascending: false }),
+  );
+  return (rows as ProductRow[]).map(toProduct);
+}
+
+/** 없으면 `null`. "아직 조회 중"(undefined)과 구분되어야 등록 플로우가 갈린다. */
+export async function getProduct(barcode: string): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('barcode', barcode)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? toProduct(data as ProductRow) : null;
+}
+
+export async function reviewsOf(barcode: string): Promise<Review[]> {
+  const rows = unwrap(
+    await supabase
+      .from('reviews')
+      .select('*')
+      .eq('barcode', barcode)
+      .order('created_at', { ascending: false }),
+  );
+  return (rows as ReviewRow[]).map(toReview);
+}
+
+/** 목록 화면에서 제품마다 따로 부르면 요청이 제품 수만큼 늘어난다. 한 번에 받아 묶는다. */
+export async function reviewStats(barcodes: string[]): Promise<Map<string, { count: number; average: number }>> {
+  const stats = new Map<string, { count: number; average: number }>();
+  if (barcodes.length === 0) return stats;
+
+  const rows = unwrap(
+    await supabase.from('reviews').select('barcode, rating').in('barcode', barcodes),
+  ) as { barcode: string; rating: number }[];
+
+  for (const row of rows) {
+    const current = stats.get(row.barcode) ?? { count: 0, average: 0 };
+    current.average = (current.average * current.count + row.rating) / (current.count + 1);
+    current.count += 1;
+    stats.set(row.barcode, current);
+  }
+  return stats;
 }
 
 export function averageRating(reviews: Review[]) {
@@ -69,21 +132,49 @@ export function averageRating(reviews: Review[]) {
   return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
 }
 
-export async function savePhoto(barcode: string, blob: Blob) {
-  await db.photos.put({ barcode, blob });
+// ─── 저장 ───
+
+/** 사진을 스토리지에 올리고 객체 키를 돌려준다.
+ *  키를 바코드로 통일해 두면 제품 행과 사진이 따로 놀 일이 없다. */
+export async function uploadPhoto(barcode: string, blob: Blob): Promise<string> {
+  const extension = blob.type === 'image/webp' ? 'webp' : 'png';
+  const path = `${barcode}.${extension}`;
+  const { error } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, blob, { contentType: blob.type, upsert: true });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+export async function createProduct(input: {
+  barcode: string;
+  name: string;
+  category: Category;
+  photoPath: string | null;
+  photoIsCutout: boolean;
+}) {
+  await ensureSession();
+  // 같은 제품을 여러 명이 동시에 등록할 수 있다. 먼저 올라간 것을 살린다.
+  const { error } = await supabase.from('products').insert({
+    barcode: input.barcode,
+    name: input.name,
+    category: input.category,
+    photo_path: input.photoPath,
+    photo_is_cutout: input.photoIsCutout,
+  });
+  if (error && !/duplicate key/i.test(error.message)) throw new Error(error.message);
 }
 
 export async function addReview(
   barcode: string,
   input: Pick<Review, 'rating' | 'body' | 'keywords'>,
 ) {
-  await db.reviews.add({
-    id: crypto.randomUUID(),
-    barcode,
-    createdAt: Date.now(),
-    ...input,
-  });
+  await ensureSession();
+  const { error } = await supabase.from('reviews').insert({ barcode, ...input });
+  if (error) throw new Error(error.message);
 }
+
+export { photoUrl };
 
 /** "5일 전" 처럼 리뷰 목록에 붙는 짧은 표기. */
 export function shortRelative(timestamp: number) {
@@ -96,85 +187,4 @@ export function shortRelative(timestamp: number) {
   if (hours >= 1) return `${hours}시간 전`;
   if (minutes >= 1) return `${minutes}분 전`;
   return '방금';
-}
-
-// ─── 시드 ───
-// 마일스톤 1·2 는 카메라 없이 확인한다. 바코드 없이도 S03·S07 이 실데이터로 뜨도록
-// 첫 실행에 더미를 넣는다. (SampleData.swift 와 같은 내용)
-
-const DAY = 86_400_000;
-
-const SEEDS: {
-  barcode: string;
-  name: string;
-  category: Category;
-  asset?: string;
-  reviews: [number, string, string[], number][];
-}[] = [
-  {
-    barcode: '8801234567890',
-    name: '대파 육개장면',
-    category: '라면',
-    asset: '/seed/daepa-ramen.png',
-    reviews: [
-      [5, '대파 향이 진짜 진해요.\n국물이 칼칼하고 시원합니다!', ['국물이 진해요', '해장용'], 5],
-      [4, '육개장 국물에 대파가 듬뿍이라\n해장으로 딱이에요.', ['해장용'], 12],
-      [5, '면발이 쫄깃하고 대파블럭이 실해요.\n재구매 의사 100%입니다!', ['재구매'], 21],
-      [3, '생각보다 안 맵고 순한 편이에요.\n계란 풀어 먹으면 더 맛있어요.', [], 30],
-    ],
-  },
-  {
-    barcode: '8801234567891',
-    name: '제주 똣똣라면',
-    category: '라면',
-    asset: '/seed/jeju-ramen.png',
-    reviews: [
-      [4, '국물이 담백하고 깔끔해요.\n짜지 않아서 좋았습니다.', ['가성비'], 3],
-      [5, '제주 느낌 물씬 나는 맛이에요.\n선물용으로도 괜찮아요.', ['재구매'], 9],
-    ],
-  },
-  {
-    barcode: '8801234567892',
-    name: '초코 쿠키샌드',
-    category: '과자',
-    reviews: [[4, '달지 않고 초코가 진해요.', ['달아요'], 2]],
-  },
-];
-
-export async function seedIfNeeded() {
-  if ((await db.products.count()) > 0) return;
-
-  for (const seed of SEEDS) {
-    let hasPhoto = false;
-    if (seed.asset) {
-      try {
-        const res = await fetch(seed.asset);
-        if (res.ok) {
-          await savePhoto(seed.barcode, await res.blob());
-          hasPhoto = true;
-        }
-      } catch {
-        // 시드 이미지가 없어도 앱은 떠야 한다
-      }
-    }
-
-    await db.products.put({
-      barcode: seed.barcode,
-      name: seed.name,
-      category: seed.category,
-      photoIsCutout: hasPhoto,
-      createdAt: Date.now() - SEEDS.length * DAY,
-    });
-
-    for (const [rating, body, keywords, daysAgo] of seed.reviews) {
-      await db.reviews.add({
-        id: crypto.randomUUID(),
-        barcode: seed.barcode,
-        rating,
-        body,
-        keywords,
-        createdAt: Date.now() - daysAgo * DAY,
-      });
-    }
-  }
 }

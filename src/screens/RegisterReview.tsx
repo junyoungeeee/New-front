@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { CATEGORIES, addReview, db, savePhoto, type Category } from '../db/db';
+import { CATEGORIES, addReview, createProduct, uploadPhoto, type Category } from '../db/db';
+import { useProduct, useRefreshAfterWrite } from '../db/queries';
 import { Chip, GlassButton, ReceiptHeader, ReceiptScreen, StarRating } from '../design/ReceiptScreen';
 import { PerforationLine, ReceiptPaper } from '../design/parts';
 import { Icon } from '../design/Icon';
@@ -28,9 +28,9 @@ export function RegisterReview() {
   const { barcode = '' } = useParams();
   const navigate = useNavigate();
 
-  // Dexie 의 get() 은 "없음"도 undefined 로 준다. useLiveQuery 의 "아직 조회 중"과 값이 같아서
-  // 그대로 쓰면 둘을 구분할 수 없다 — null 로 바꿔서 "없음"을 명시한다.
-  const product = useLiveQuery(async () => (await db.products.get(barcode)) ?? null, [barcode]);
+  // undefined = 아직 조회 중, null = 없는 제품. 등록 플로우가 이 둘을 구분해야 한다.
+  const { data: product } = useProduct(barcode);
+  const refresh = useRefreshAfterWrite();
   const photo = peekPendingPhoto(barcode);
 
   const [name, setName] = useState('');
@@ -39,6 +39,7 @@ export function RegisterReview() {
   const [body, setBody] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
 
   // 신규 등록인데 촬영 결과가 없으면(뒤로가기·새로고침) 사진 화면으로 돌려보낸다.
   const registering = !product;
@@ -60,22 +61,27 @@ export function RegisterReview() {
     if (!canSave || saving) return;
     setSaving(true);
 
-    if (registering && photo) {
-      await db.products.put({
-        barcode,
-        name: name.trim(),
-        category,
-        photoIsCutout: photo.isCutout,
-        createdAt: Date.now(),
-      });
-      await savePhoto(barcode, photo.blob);
-      clearPendingPhoto();
+    try {
+      if (registering && photo) {
+        const photoPath = await uploadPhoto(barcode, photo.blob);
+        await createProduct({
+          barcode,
+          name: name.trim(),
+          category,
+          photoPath,
+          photoIsCutout: photo.isCutout,
+        });
+        clearPendingPhoto();
+      }
+
+      await addReview(barcode, { rating, body: body.trim(), keywords });
+    } catch (error) {
+      // 서버에 못 올렸으면 화면을 넘기지 않는다 — 넘겨버리면 저장된 줄 알고 떠난다
+      setSaveError(error instanceof Error ? error.message : '저장하지 못했어요.');
+      setSaving(false);
+      return;
     }
-
-    await addReview(barcode, { rating, body: body.trim(), keywords });
-    // 잃을 게 생긴 시점 — 여기서만 설치 안내를 띄운다(§5.4)
-    window.dispatchEvent(new Event('new-app:review-saved'));
-
+    refresh(barcode);
     // 저장이 끝나면 등록 플로우 전체를 히스토리에서 걷어낸다.
     if (registering) {
       // 새로 등록한 제품은 그 카테고리로 보내 프린터에서 바로 뽑혀 나오게 한다.
@@ -200,7 +206,7 @@ export function RegisterReview() {
           ) : (
             product && (
               <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                <ProductPhoto barcode={product.barcode} width={72} height={72} radius={8} />
+                <ProductPhoto path={product.photoPath} width={72} height={72} radius={8} />
                 <div>
                   <div className="field-label">{product.category}</div>
                   <div style={{ height: 5 }} />
@@ -249,11 +255,20 @@ export function RegisterReview() {
 
           <GlassButton
             icon="printer"
-            title={registering ? '등록하기' : '리뷰 남기기'}
+            title={saving ? '저장하는 중…' : registering ? '등록하기' : '리뷰 남기기'}
             fontSize={14.5}
             disabled={!canSave || saving}
             onClick={save}
           />
+
+          {saveError && (
+            <>
+              <div style={{ height: 12 }} />
+              <div className="center" style={{ fontSize: 12.5, color: 'var(--pink)' }}>
+                {saveError}
+              </div>
+            </>
+          )}
         </div>
       </ReceiptPaper>
     </ReceiptScreen>

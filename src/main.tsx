@@ -1,15 +1,27 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
-import { seedIfNeeded } from './db/db';
 import { installAudioUnlock } from './lib/feedSound';
+import { ensureSession } from './lib/supabase';
 import './styles.css';
 
-// 렌더를 시드에 매달지 않는다. IndexedDB 가 막히거나(사생활 보호 모드) 업그레이드가 걸리면
-// 화면이 통째로 안 뜬다. 시드는 뒤에서 넣고, 들어오는 대로 liveQuery 가 화면을 갱신한다.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // 영수증 목록이 초 단위로 바뀌지는 않는다. 화면을 오갈 때마다 다시 부르지 않게 둔다.
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </StrictMode>,
 );
 
@@ -17,5 +29,5 @@ createRoot(document.getElementById('root')!).render(
 // 홈에서 카테고리를 누르는 탭이 해제 시점이 되어, S07 자동 급지부터 소리가 난다.
 installAudioUnlock();
 
-// 마일스톤 1·2 는 카메라 없이 확인한다 — 첫 실행에 더미를 넣는다.
-void seedIfNeeded().catch(() => undefined);
+// 리뷰에 작성자를 붙이기 위한 익명 세션. 꺼져 있어도 앱은 돌아간다.
+void ensureSession().catch(() => undefined);

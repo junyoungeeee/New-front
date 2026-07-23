@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { CATEGORIES, db } from '../db/db';
+import { CATEGORIES } from '../db/db';
+import { useProducts } from '../db/queries';
 import { ReceiptScreen } from '../design/ReceiptScreen';
 import { Barcode, DottedLine, PerforationLine, ReceiptPaper, ScanBrackets } from '../design/parts';
 import { CATEGORY_ICONS, Icon } from '../design/Icon';
@@ -8,7 +8,7 @@ import { CATEGORY_ICONS, Icon } from '../design/Icon';
 /** S01 홈 — 카테고리별 제품 수를 집계해 영수증 표로 보여준다. */
 export function Home() {
   const navigate = useNavigate();
-  const products = useLiveQuery(() => db.products.toArray(), [], []);
+  const { data: products = [] } = useProducts();
 
   const count = (category: string) => products.filter((p) => p.category === category).length;
 

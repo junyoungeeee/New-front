@@ -6,6 +6,13 @@ export interface CutoutResult {
   isCutout: boolean;
 }
 
+/** 저장·업로드할 사진의 긴 변 최대 길이.
+ *
+ * 누끼 원본은 2000px 안팎이라 PNG 로 9MB 를 넘긴다. 로컬에만 둘 때는 넘어갔지만 서버로
+ * 올리면 셀룰러 업로드가 한참 걸리고, 목록 화면에서 여러 장을 받으면 데이터가 터진다.
+ * 영수증 안에서 가장 크게 쓰이는 자리가 248×175 이므로 1024 면 넉넉하다. */
+const MAX_EDGE = 1024;
+
 /** 모델은 수 MB~수십 MB 다. 촬영 후에 받으면 사용자는 셔터를 누르고 수십 초를 기다린다.
  *  S05 에 들어오는 순간(구도를 잡는 동안) 미리 받아 둔다. */
 let preloading: Promise<unknown> | null = null;
@@ -32,13 +39,38 @@ export async function cutout(source: Blob, windowAspect: number): Promise<Cutout
       90_000,
     );
     // 결과가 크롭 영역의 90% 이상을 덮으면 배경을 통째로 잡은 것 — 폴백
-    if ((await opaqueRatio(out)) >= 0.9) return { blob: cropped, isCutout: false };
-    return { blob: out, isCutout: true };
+    if ((await opaqueRatio(out)) >= 0.9) return { blob: await shrink(cropped), isCutout: false };
+    return { blob: await shrink(out), isCutout: true };
   } catch {
     // 3. 폴백 — results 가 비었거나, 모델 다운로드 실패거나, 타임아웃이거나.
     //    웹에서는 실패 경우가 하나 더 있다: 네트워크.
-    return { blob: cropped, isCutout: false };
+    return { blob: await shrink(cropped), isCutout: false };
   }
+}
+
+/** 긴 변을 MAX_EDGE 로 줄이고 WebP 로 다시 굽는다.
+ *
+ * WebP 는 알파를 지원해서 누끼 투명도가 살아남고, 같은 그림을 PNG 의 1/10 안팎으로 담는다.
+ * 다만 사파리는 오랫동안 캔버스 WebP **인코딩**을 지원하지 않으면서도 조용히 PNG 를
+ * 돌려줬다. 그래서 결과 타입을 확인하고, WebP 가 아니면 PNG 로 받아들인다 —
+ * 크기는 덜 줄지만 리사이즈만으로도 9MB 대에서 한참 내려온다. */
+async function shrink(source: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(source);
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const webp = await toBlob(canvas, 'image/webp', 0.85);
+  if (webp.type === 'image/webp') return webp;
+  return toBlob(canvas, 'image/png');
 }
 
 async function cropToGuide(source: Blob, windowAspect: number): Promise<Blob> {
@@ -69,11 +101,12 @@ async function opaqueRatio(blob: Blob): Promise<number> {
   return opaque / (size * size);
 }
 
-function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+function toBlob(canvas: HTMLCanvasElement, type = 'image/png', quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('이미지를 만들지 못했습니다'))),
-      'image/png',
+      type,
+      quality,
     );
   });
 }

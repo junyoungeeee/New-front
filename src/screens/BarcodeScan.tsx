@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../db/db';
+import { getProduct } from '../db/db';
 import { ReceiptScreen, ReceiptHeader } from '../design/ReceiptScreen';
 import { PerforationLine, ReceiptPaper, ScanBrackets } from '../design/parts';
 import { Icon } from '../design/Icon';
@@ -25,7 +25,7 @@ export function BarcodeScan() {
     setBusy(true);
 
     // 한 번 등록한 바코드는 다음부터 자동으로 채워진다 — MVP 에서 "이미 등록된 제품"의 의미.
-    const existing = await db.products.get(barcode);
+    const existing = await getProduct(barcode).catch(() => null);
     navigate(existing ? `/p/${barcode}` : `/p/${barcode}/new`, { replace: true });
   }
 
