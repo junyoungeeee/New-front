@@ -1,0 +1,9 @@
+{
+  "name": "New. — 신제품 리뷰",
+  "short_name": "New.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E4DED6",
+  "theme_color": "#E4DED6",
+  "orientation": "portrait"
+}

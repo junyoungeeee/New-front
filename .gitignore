@@ -1,0 +1,21 @@
+# 의존성 · 빌드 산출물
+node_modules/
+dist/
+NewApp/build/
+NewApp/TestResults.xcresult/
+TestResults.xcresult/
+
+# OS · 도구 상태
+.DS_Store
+.omc/
+
+# 참고 자료 (저장소에 두지 않는다)
+/*.mov
+/*.m4a
+/*.jpeg
+/*.jpg
+/*.png
+public/feed.m4a
+
+# 타입체크 캐시
+*.tsbuildinfo
