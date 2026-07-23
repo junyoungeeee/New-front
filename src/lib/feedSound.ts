@@ -6,6 +6,72 @@ let context: AudioContext | null = null;
 let clip: AudioBuffer | null = null;
 let noise: AudioBuffer | null = null;
 let loading: Promise<void> | null = null;
+let silentLoop: HTMLAudioElement | null = null;
+
+/** 무음(벨소리) 스위치가 걸려 있어도 소리가 나게 한다.
+ *
+ * iOS 는 페이지의 오디오 세션이 "환경음"이면 Web Audio 를 통째로 죽인다. 세션을
+ * **"미디어 재생"** 으로 올리면 무음 스위치를 무시하는데, iOS 에서 이 둘은 한 덩어리라
+ * **다른 앱 소리(음악·팟캐스트)를 끊는 대가**가 함께 따라온다. 분리할 수 없다.
+ *
+ * 정식 API 가 있으면 그걸 쓰고, 없으면 무음 트랙을 계속 재생해 세션을 붙잡는 예전 우회법으로
+ * 떨어진다. 우회법은 WebKit 내부 동작에 기대는 것이라 iOS 판올림으로 깨질 수 있다. */
+function claimPlaybackSession() {
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (session) {
+    try {
+      session.type = 'playback';
+      return;
+    } catch {
+      // 아래 우회법으로 간다
+    }
+  }
+
+  // 우회법은 iOS 에서만 쓴다. 다른 곳에서는 무음 스위치라는 게 없는데다, 무음 트랙이 계속
+  // 재생되면 브라우저 탭에 "소리 재생 중" 표시가 내내 붙는다.
+  const iOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!iOS || silentLoop || !context) return;
+
+  silentLoop = document.createElement('audio');
+  silentLoop.src = silentWavUrl();
+  silentLoop.loop = true;
+  silentLoop.setAttribute('playsinline', '');
+  try {
+    // 컨텍스트를 통과시켜야 세션이 Web Audio 출력에까지 걸린다
+    context.createMediaElementSource(silentLoop).connect(context.destination);
+  } catch {
+    // 연결이 안 되면 엘리먼트 재생만으로도 세션은 잡힌다
+  }
+  void silentLoop.play().catch(() => undefined);
+}
+
+/** 내용이 전부 0인 WAV. 들리지 않지만 "재생 중"으로 잡힌다. */
+function silentWavUrl() {
+  const rate = 8000;
+  const frames = rate / 2;
+  const buffer = new ArrayBuffer(44 + frames * 2);
+  const view = new DataView(buffer);
+  const text = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+  text(0, 'RIFF');
+  view.setUint32(4, 36 + frames * 2, true);
+  text(8, 'WAVE');
+  text(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // 모노
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  text(36, 'data');
+  view.setUint32(40, frames * 2, true);
+  // 나머지는 0 = 무음
+  return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+}
 
 /** iOS 잠금 해제.
  *
@@ -29,6 +95,9 @@ export function installAudioUnlock() {
     source.buffer = context.createBuffer(1, 1, context.sampleRate);
     source.connect(context.destination);
     source.start(0);
+
+    // 무음 스위치가 걸려 있어도 들리게 세션을 올린다 (제스처 안이어야 잡힌다)
+    claimPlaybackSession();
 
     void primeFeedSound(); // 음원도 미리 받아 둔다
 
