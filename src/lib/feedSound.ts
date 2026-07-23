@@ -7,8 +7,40 @@ let clip: AudioBuffer | null = null;
 let noise: AudioBuffer | null = null;
 let loading: Promise<void> | null = null;
 
-/** 사용자 제스처 안에서 불러야 한다 — 자동재생 정책상 그 밖에서는 컨텍스트가 잠긴다.
- *  컨텍스트가 깨어나고 음원 준비가 끝나면 이행된다. */
+/** iOS 잠금 해제.
+ *
+ * iOS Safari 는 `resume()` 만으로는 부족하고 **제스처 안에서 실제로 한 번 재생**해야 열린다.
+ * 앱 코드는 소리를 `await` 뒤(`.then`)에 시작하는데 그 시점은 이미 제스처 밖이라, 그대로 두면
+ * 아무 소리도 나지 않는다 — 진단 페이지(탭 핸들러 안에서 바로 재생)는 들리는데 앱만
+ * 조용했던 이유가 이것이다.
+ *
+ * 그래서 화면 어디든 첫 조작이 들어오는 순간 무음 버퍼를 한 번 흘려 잠금을 풀어 둔다.
+ * 홈에서 카테고리를 누르는 그 탭이 이미 해제 시점이 되므로, S07 에 들어오자마자 도는
+ * 자동 급지부터 소리가 난다. */
+export function installAudioUnlock() {
+  const events = ['pointerdown', 'touchstart', 'click', 'keydown'] as const;
+
+  const unlock = () => {
+    context ??= new AudioContext();
+    if (context.state === 'suspended') void context.resume();
+
+    // 길이 1프레임짜리 무음. 재생 자체가 목적이다.
+    const source = context.createBufferSource();
+    source.buffer = context.createBuffer(1, 1, context.sampleRate);
+    source.connect(context.destination);
+    source.start(0);
+
+    void primeFeedSound(); // 음원도 미리 받아 둔다
+
+    if (context.state === 'running') {
+      events.forEach((type) => document.removeEventListener(type, unlock, true));
+    }
+  };
+
+  events.forEach((type) => document.addEventListener(type, unlock, true));
+}
+
+/** 컨텍스트가 깨어나고 음원 준비가 끝나면 이행된다. */
 export function primeFeedSound(): Promise<void> {
   context ??= new AudioContext();
 
