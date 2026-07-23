@@ -15,7 +15,6 @@ TestResults.xcresult/
 /*.jpeg
 /*.jpg
 /*.png
-public/feed.m4a
 
 # 타입체크 캐시
 *.tsbuildinfo
