@@ -61,13 +61,15 @@ export function ProductPage() {
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 24 }}>
           <div className="receipt-header">
-            <button
-              className="logo"
-              style={{ fontSize: 40, letterSpacing: -1.4 }}
-              onClick={() => navigate(-1)}
-            >
-              Review
-            </button>
+            {/* 제목을 누르면 뒤로 가긴 했지만 그렇게 보이지 않는다 — 화살표를 따로 둔다. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => navigate(-1)} aria-label="뒤로">
+                <Icon name="chevron.left" size={24} color="var(--icon-pink)" />
+              </button>
+              <span className="logo" style={{ fontSize: 40, letterSpacing: -1.4 }}>
+                Review
+              </span>
+            </div>
             <button onClick={() => navigate('/search')} aria-label="제품 검색">
               <Icon name="magnifyingglass" size={20} color="var(--icon-pink)" />
             </button>
