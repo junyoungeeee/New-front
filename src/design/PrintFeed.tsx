@@ -8,8 +8,8 @@ import { playFeedSound, primeFeedSound } from '../lib/feedSound';
 const GAP = 18;
 
 /** 상품 한 장이 슬롯을 완전히 빠져나오는 데 걸리는 시간.
- *  참고 영상(`스크롤 느낌 복사본.mov`)의 4.0초→6.0초 구간이 정확히 한 장이다. */
-const SLIP_MS = 2000;
+ *  참고 영상(`스크롤 느낌 복사본.mov`)에선 한 장이 2초였는데, 실제로 넘겨 보니 답답해서 줄였다. */
+const SLIP_MS = 1150;
 
 /** 종이가 프린터에서 **아래로 뽑혀 나오는** 화면.
  *
@@ -140,7 +140,23 @@ export function PrintFeed({
     void primeFeedSound();
     setFed(0);
     stepRef.current = 0;
-    const id = requestAnimationFrame(() => goTo(Math.min(initial, items.length)));
+    const id = requestAnimationFrame(() => {
+      // 시작 위치를 종이 뭉치의 **아랫변이 슬롯 선에 걸린 상태**로 맞춘다.
+      //
+      // 접어 넣는 값 `translateY(-100%)` 는 **레이아웃** 높이 기준인데, 슬립 축소에 쓰는
+      // `transform: scale` 은 레이아웃 높이를 줄이지 않는다(줄이는 `zoom` 은 못 쓴다 —
+      // styles.css `.feed-scale` 주석 참고). 그래서 실제 종이보다 깊이 접혀 들어가고,
+      // 그 차이만큼 첫 급지가 빈 공간만 지나가느라 한참 뒤에야 첫 장이 나온다.
+      const strip = stripRef.current;
+      const scale = strip?.querySelector('.feed-scale');
+      const viewport = strip?.parentElement;
+      if (strip && scale && viewport) {
+        const slotY =
+          viewport.getBoundingClientRect().top + parseFloat(getComputedStyle(strip).top || '0');
+        setFed(slotY - scale.getBoundingClientRect().bottom);
+      }
+      goTo(Math.min(initial, items.length));
+    });
     return () => cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length, initial]);
