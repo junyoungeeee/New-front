@@ -47,7 +47,10 @@ export function BarcodeScan() {
     if (!pending) return;
     setBusy(true);
     const existing = await getProduct(pending).catch(() => null);
-    navigate(existing ? `/p/${pending}` : `/p/${pending}/new`, { replace: true });
+    navigate(existing ? `/p/${pending}` : `/p/${pending}/new`, {
+      replace: true,
+      state: existing ? { printIn: true } : undefined,
+    });
   }
 
   function rescan() {

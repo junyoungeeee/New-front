@@ -41,7 +41,10 @@ export function ManualBarcode() {
     setBusy(true);
     // 등록 여부에 따라 제품 페이지 / 신규 등록으로. 스캔 확인 화면과 같은 분기.
     const existing = await getProduct(clean).catch(() => null);
-    navigate(existing ? `/p/${clean}` : `/p/${clean}/new`, { replace: true });
+    navigate(existing ? `/p/${clean}` : `/p/${clean}/new`, {
+      replace: true,
+      state: existing ? { printIn: true } : undefined,
+    });
   }
 
   return (

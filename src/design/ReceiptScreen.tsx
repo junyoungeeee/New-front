@@ -2,6 +2,11 @@ import { useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from './Icon';
 import { PrinterHousing, PrinterLip } from './parts';
+import { playFeedSound } from '../lib/feedSound';
+
+/** 슬롯에서 영수증이 뽑혀 나오는 모션 길이. styles.css 의 `.roll.print-in` 애니메이션과 같아야
+ *  급지음이 모션과 함께 끝난다. */
+const PRINT_MS = 1100;
 
 /** 배경 사진(배경.png, 빈 슬롯) 안의 좌표. 종이·슬롯을 사진에 맞춰 얹으려면 이 값이 기준이다. */
 const PHOTO = {
@@ -44,20 +49,30 @@ export function ReceiptScreen({
   dark = false,
   scrolls = true,
   photo = true,
+  printIn = false,
   children,
 }: {
   dark?: boolean;
   scrolls?: boolean;
   /** 프린터를 코드로 그리는 대신 배경 사진(배경.png)을 쓴다. 기본값. 끄면 코드 프린터로 돌아간다. */
   photo?: boolean;
+  /** 슬롯에서 뽑혀 나오는 모션 + 급지음으로 등장한다(스캔으로 이미 있는 제품에 들어올 때). */
+  printIn?: boolean;
   children: ReactNode;
 }) {
   const navigate = useNavigate();
   usePhotoScale(photo);
+
+  // 모션과 같은 길이로 급지음을 낸다. 컨텍스트는 스캔 확인 탭에서 이미 깨어 있다.
+  useEffect(() => {
+    if (!printIn) return;
+    return playFeedSound(PRINT_MS);
+  }, [printIn]);
+
   return (
     <div className={`stage${dark ? ' dark' : ''}${photo ? ' photo' : ''}`}>
       {!photo && <PrinterHousing />}
-      <div className={`roll${scrolls ? '' : ' static'}`}>
+      <div className={`roll${scrolls ? '' : ' static'}${printIn ? ' print-in' : ''}`}>
         <div className="roll-inner">
           <div className="roll-scale">{children}</div>
         </div>

@@ -1,4 +1,5 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { averageRating, shortRelative, type Review } from '../db/db';
 import { useProduct, useReviews } from '../db/queries';
 import { ReceiptScreen, StarRating } from '../design/ReceiptScreen';
@@ -10,6 +11,17 @@ import { ProductPhoto } from '../lib/photo';
 export function ProductPage() {
   const { barcode = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // 스캔으로 이미 있는 제품에 들어왔으면 슬롯에서 뽑혀 나오는 모션·소리를 한 번 준다.
+  // 마운트 때 한 번만 집어 오고 state 는 지운다 — 뒤로가기·새로고침에 다시 울리지 않게.
+  const [printIn] = useState(() =>
+    Boolean((location.state as { printIn?: boolean } | null)?.printIn),
+  );
+  useEffect(() => {
+    if (printIn) navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: product } = useProduct(barcode);
   const { data: reviews = [] } = useReviews(barcode);
@@ -45,7 +57,7 @@ export function ProductPage() {
   }
 
   return (
-    <ReceiptScreen>
+    <ReceiptScreen printIn={printIn}>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 24 }}>
           <div className="receipt-header">

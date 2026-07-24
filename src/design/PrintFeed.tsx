@@ -55,20 +55,26 @@ export function PrintFeed({
 
   /** 나온 순서(k)별 위치를 잰다. DOM 은 뒤집혀 있으므로 인덱스를 되돌려 찾는다.
    *
-   * getBoundingClientRect 로 재는 이유: 사진 모드에선 슬립을 `zoom` 으로 축소하는데,
-   * offsetTop/offsetHeight 는 zoom 을 일관되게 반영하지 않아(브라우저·버전별로 다르다) 급지량이
-   * 어긋난다 — 첫 화면에서 바코드 꼬리만 나오던 원인. rect 는 항상 실제 렌더 픽셀이라, strip 기준
-   * 상대 위치(slip.top − strip.top)는 strip 의 transform 과 무관하게 zoom 까지 반영해 일관된다. */
+   * 급지량을 **높이 계산이 아니라 현재 위치와의 차이**로 구한다. 사진 모드에선 슬립만 `zoom` 으로
+   * 축소되는데, 종이 뭉치(feed-strip)는 zoom 밖이고 슬립은 zoom 안이라 두 좌표계를 섞으면
+   * (stripHeight − topOf) 가 배율만큼 어긋난다 — 쉴 때도 맨 위 장의 윗부분(사진)이 슬롯에 잘려
+   * 있던 원인이다. 반면 "지금 이 장의 윗변이 화면 어디에 있나"와 "슬롯 선이 화면 어디인가"는
+   * 둘 다 실제 렌더 픽셀이라 배율과 무관하게 맞는다. 급지량을 그 차이만큼 옮기면 끝. */
   const measure = useCallback(() => {
     const strip = stripRef.current;
-    if (!strip) return null;
-    const stripRect = strip.getBoundingClientRect();
+    const viewport = strip?.parentElement;
+    if (!strip || !viewport) return null;
+    // `.feed-strip` 의 top 이 곧 슬롯 선(마스크가 자르는 높이)이다. transform 은 섞이지 않는다.
+    const slotY =
+      viewport.getBoundingClientRect().top + parseFloat(getComputedStyle(strip).top || '0');
     const at = (k: number) => itemRefs.current[items.length - 1 - k];
     return {
-      stripHeight: stripRect.height,
-      topOf: (k: number) => {
-        const el = at(k);
-        return el ? el.getBoundingClientRect().top - stripRect.top : 0;
+      /** n 장이 나온 상태 = n-1 번째 장의 윗변이 슬롯 선에 딱 걸린 상태. */
+      fedFor: (n: number) => {
+        if (n <= 0) return 0;
+        const el = at(n - 1);
+        if (!el) return fedRef.current;
+        return fedRef.current + (slotY - el.getBoundingClientRect().top);
       },
       heightOf: (k: number) => at(k)?.getBoundingClientRect().height ?? 0,
     };
@@ -82,7 +88,7 @@ export function PrintFeed({
   const syncFed = useCallback(() => {
     const m = measure();
     if (!m) return;
-    const target = stepRef.current <= 0 ? 0 : m.stripHeight - m.topOf(stepRef.current - 1);
+    const target = m.fedFor(stepRef.current);
     if (Math.abs(target - fedRef.current) > 0.5) setFed(target);
   }, [measure]);
 
@@ -92,10 +98,8 @@ export function PrintFeed({
       const m = measure();
       if (!m || target === stepRef.current) return;
 
-      // n 장이 나왔을 때의 급지량 = 종이 뭉치 아랫변에서 n-1 번째 장의 윗변까지
-      const fedFor = (n: number) => (n <= 0 ? 0 : m.stripHeight - m.topOf(n - 1));
       const from = fedRef.current;
-      const to = fedFor(target);
+      const to = m.fedFor(target);
       const distance = Math.abs(to - from);
       if (distance < 1) return;
 
