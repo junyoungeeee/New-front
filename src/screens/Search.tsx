@@ -35,14 +35,11 @@ export function Search() {
     <ReceiptScreen>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 30 }}>
-          <ReceiptHeader trailingIcon="xmark" onAction={() => navigate(-1)} />
+          <ReceiptHeader title="Search" trailingIcon="xmark" onAction={() => navigate(-1)} />
 
           <div style={{ height: 20 }} />
           <PerforationLine />
           <div style={{ height: 22 }} />
-
-          <div className="field-label">SEARCH</div>
-          <div style={{ height: 10 }} />
 
           <div className="search-box">
             <Icon name="magnifyingglass" size={17} color="var(--icon-pink)" />

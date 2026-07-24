@@ -66,10 +66,10 @@ export function ProductPhotoScreen() {
       : '배경은 자동으로 지워집니다';
 
   return (
-    <ReceiptScreen dark scrolls={false}>
+    <ReceiptScreen scrolls={false}>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 26 }}>
-          <ReceiptHeader trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
+          <ReceiptHeader title="사진" trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
 
           <div style={{ height: 20 }} />
           <PerforationLine />

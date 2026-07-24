@@ -16,14 +16,6 @@ export function Home() {
     <ReceiptScreen>
       <ReceiptPaper>
         <div className="pad">
-          <div className="receipt-header">
-            <span className="logo">New.</span>
-            <button onClick={() => navigate('/search')} aria-label="제품 검색">
-              <Icon name="magnifyingglass" size={21} color="var(--icon-pink)" />
-            </button>
-          </div>
-
-          <div style={{ height: 26 }} />
           <PerforationLine />
           <div style={{ height: 34 }} />
 

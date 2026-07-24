@@ -100,10 +100,10 @@ export function BarcodeScan() {
   const checksum = pending ? ean13Ok(pending) : null;
 
   return (
-    <ReceiptScreen dark scrolls={false}>
+    <ReceiptScreen scrolls={false}>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 26 }}>
-          <ReceiptHeader trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
+          <ReceiptHeader title="스캔" trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
 
           <div style={{ height: 20 }} />
           <PerforationLine />

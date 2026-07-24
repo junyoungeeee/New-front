@@ -1,6 +1,37 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Icon } from './Icon';
 import { PrinterHousing, PrinterLip } from './parts';
+
+/** 배경 사진(배경.png, 빈 슬롯) 안의 좌표. 종이·슬롯을 사진에 맞춰 얹으려면 이 값이 기준이다. */
+const PHOTO = {
+  width: 1046, // 원본 폭
+  frameMax: 430, // 데스크톱에서 사진이 무한정 커지지 않게 잡는 상한
+  paperWidth: 580, // 슬롯 개구부(약 620) 안에 들어오는 폭
+  designWidth: 300, // 코드로 그린 영수증의 설계 폭
+};
+
+/** 사진 배경은 폭에 맞춰 늘어난다. 영수증도 같은 비율로 줄여야 사진 속 영수증과 겹친다.
+ *
+ * `zoom` 을 쓰는 이유: `transform: scale` 은 레이아웃 높이를 바꾸지 않아 스크롤 길이가 틀어진다.
+ * 배율은 CSS calc 로 못 만든다 — 길이끼리 나눈 무단위 값이 필요해서 여기서 계산한다. */
+export function usePhotoScale(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const root = document.documentElement;
+    const apply = () => {
+      const frame = Math.min(window.innerWidth, PHOTO.frameMax);
+      const paper = (PHOTO.paperWidth * frame) / PHOTO.width;
+      root.style.setProperty('--photo-zoom', String(paper / PHOTO.designWidth));
+    };
+    apply();
+    window.addEventListener('resize', apply);
+    return () => {
+      window.removeEventListener('resize', apply);
+      root.style.removeProperty('--photo-zoom');
+    };
+  }, [enabled]);
+}
 
 /** 화면 7개가 전부 이 골격을 쓴다.
  *
@@ -12,34 +43,51 @@ import { PrinterHousing, PrinterLip } from './parts';
 export function ReceiptScreen({
   dark = false,
   scrolls = true,
+  photo = true,
   children,
 }: {
   dark?: boolean;
   scrolls?: boolean;
+  /** 프린터를 코드로 그리는 대신 배경 사진(배경.png)을 쓴다. 기본값. 끄면 코드 프린터로 돌아간다. */
+  photo?: boolean;
   children: ReactNode;
 }) {
+  const navigate = useNavigate();
+  usePhotoScale(photo);
   return (
-    <div className={`stage${dark ? ' dark' : ''}`}>
-      <PrinterHousing />
+    <div className={`stage${dark ? ' dark' : ''}${photo ? ' photo' : ''}`}>
+      {!photo && <PrinterHousing />}
       <div className={`roll${scrolls ? '' : ' static'}`}>
-        <div className="roll-inner">{children}</div>
+        <div className="roll-inner">
+          <div className="roll-scale">{children}</div>
+        </div>
       </div>
-      <PrinterLip />
+      {!photo && <PrinterLip />}
+      {/* 사진 간판에 그려진 돋보기를 실제 검색 버튼으로 만든다 — 모든 화면 공통. */}
+      {photo && (
+        <button
+          className="sign-search"
+          onClick={() => navigate('/search')}
+          aria-label="제품 검색"
+        />
+      )}
     </div>
   );
 }
 
-/** "New." 로고 + 오른쪽 액션. S01·S02·S04·S05·S06 이 공유한다. */
+/** 영수증 머리글 — 왼쪽 제목 + 오른쪽 액션. 제목은 화면마다 다르다(간판의 "New." 는 기계 브랜드로 고정). */
 export function ReceiptHeader({
+  title = 'New.',
   trailingIcon,
   onAction,
 }: {
+  title?: string;
   trailingIcon: 'xmark' | 'magnifyingglass';
   onAction: () => void;
 }) {
   return (
     <div className="receipt-header">
-      <span className="logo">New.</span>
+      <span className="logo">{title}</span>
       <button onClick={onAction} aria-label={trailingIcon === 'xmark' ? '닫기' : '검색'}>
         <Icon name={trailingIcon} size={21} color="var(--icon-pink)" />
       </button>

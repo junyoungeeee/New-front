@@ -12,7 +12,7 @@ export function NotFound() {
     <ReceiptScreen scrolls={false}>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 26 }}>
-          <ReceiptHeader trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
+          <ReceiptHeader title="없음" trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
 
           <div style={{ height: 20 }} />
           <PerforationLine />

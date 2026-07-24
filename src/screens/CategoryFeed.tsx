@@ -24,11 +24,11 @@ export function CategoryFeed() {
   const list: Product[] = products ?? [];
   const { data: stats } = useReviewStats(list.map((p) => p.barcode));
 
-  // 머리글은 영수증이 아니라 프린터 본체에 얹는다 — 왼쪽 항목 이름, 오른쪽 개수.
+  // 제목은 종이가 아니라 사진의 핑크 슬롯 위에 검정 글씨로 얹는다 — 왼쪽 항목 이름, 오른쪽 개수.
   const label = (
     <>
       <button className="name" onClick={() => navigate('/')}>
-        <Icon name="chevron.left" size={16} color="rgba(255,255,255,0.8)" />
+        <Icon name="chevron.left" size={15} color="var(--ink)" />
         {category}
       </button>
       <span className="count">{loaded ? `${list.length} ITEMS` : ''}</span>
