@@ -284,8 +284,15 @@ textarea {
 .feed-stage.photo .feed-strip {
   width: fit-content;
 }
+/* 여기만 `zoom` 이 아니라 `transform: scale` 을 쓴다.
+   `zoom` 이 걸린 안쪽 요소는 getBoundingClientRect 반환 좌표계가 브라우저마다 다르다 —
+   iOS Safari 는 축소를 반영한 값(244)을, iOS Chrome 은 반영하지 않은 값(328.4)을 준다.
+   급지량은 이 값으로 계산하므로 Chrome 에서만 종이가 잘렸다. `transform` 은 rect 에 반영되는 것이
+   표준에 규정돼 있어 어디서나 같다. 레이아웃 높이는 안 줄지만, 위치는 우리가 직접 재서 맞추므로
+   상관없다(`.roll-scale` 은 스크롤 길이가 레이아웃 높이에 걸려 있어 그대로 zoom 을 쓴다). */
 .feed-stage.photo .feed-scale {
-  zoom: var(--photo-zoom, 1);
+  transform: scale(var(--photo-zoom, 1));
+  transform-origin: top center;
 }
 
 /* ─── 프린터 ─── */
