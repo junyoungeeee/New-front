@@ -11,6 +11,73 @@ const GAP = 18;
  *  참고 영상(`스크롤 느낌 복사본.mov`)의 4.0초→6.0초 구간이 정확히 한 장이다. */
 const SLIP_MS = 2000;
 
+/** 임시 진단용 오버레이. `?debug=1` 일 때만 그린다.
+ *
+ * 아이폰 Chrome 에서만 종이가 잘리는데 재현 환경이 없어, 실제 기기에서 숫자를 직접 읽으려고 둔다.
+ * 핵심은 `tops` — 나와 있는 장의 윗변이 슬롯 선에서 몇 px 떨어져 있는가. 0 이면 급지량은 맞는
+ * 것이고(=원인이 마스크·렌더링 쪽), 음수면 급지가 모자란 것이다. 원인 확인되면 이 파일에서 지운다. */
+function FeedDebug({
+  stripRef,
+  step,
+}: {
+  stripRef: React.RefObject<HTMLDivElement>;
+  step: number;
+}) {
+  const [info, setInfo] = useState<string>('');
+
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('debug')) return;
+    const read = () => {
+      const strip = stripRef.current;
+      const viewport = strip?.parentElement;
+      if (!strip || !viewport) return;
+      const slotY =
+        viewport.getBoundingClientRect().top + parseFloat(getComputedStyle(strip).top || '0');
+      const tops = [...strip.querySelectorAll('.feed-scale > div')].map((el) =>
+        +(el.getBoundingClientRect().top - slotY).toFixed(1),
+      );
+      const heights = [...strip.querySelectorAll('.feed-scale > div')].map((el) =>
+        +el.getBoundingClientRect().height.toFixed(1),
+      );
+      setInfo(
+        [
+          `clientW ${document.documentElement.clientWidth}  innerW ${window.innerWidth}`,
+          `zoom ${getComputedStyle(document.documentElement).getPropertyValue('--photo-zoom').trim()}`,
+          `slotY ${slotY.toFixed(1)}  fed ${getComputedStyle(strip).getPropertyValue('--fed').trim()}`,
+          `stripH ${strip.getBoundingClientRect().height.toFixed(1)}  step ${step}`,
+          `tops ${tops.join(' , ')}`,
+          `hs   ${heights.join(' , ')}`,
+        ].join('\n'),
+      );
+    };
+    read();
+    const id = window.setInterval(read, 400);
+    return () => window.clearInterval(id);
+  }, [stripRef, step]);
+
+  if (!info) return null;
+  return (
+    <pre
+      style={{
+        position: 'fixed',
+        left: 0,
+        bottom: 0,
+        zIndex: 9999,
+        margin: 0,
+        padding: '6px 8px',
+        maxWidth: '100vw',
+        background: 'rgba(0,0,0,0.8)',
+        color: '#4ef08a',
+        font: '10px/1.45 ui-monospace, Menlo, monospace',
+        whiteSpace: 'pre',
+        pointerEvents: 'none',
+      }}
+    >
+      {info}
+    </pre>
+  );
+}
+
 /** 종이가 프린터에서 **아래로 뽑혀 나오는** 화면.
  *
  * 일반 스크롤과 방향이 반대다. 스크롤은 종이를 위로 걷어 올리지만, 프린터는 종이를 아래로
@@ -277,6 +344,8 @@ export function PrintFeed({
       {!photo && <PrinterLip />}
       {/* 제목은 사진의 핑크 슬롯 위에 검정 글씨로 얹는다 — 종이가 아니라 기계에 붙는다. */}
       {photo && label && <div className="photo-feed-label">{label}</div>}
+      <FeedDebug stripRef={stripRef} step={step} />
+      {/* ↑ 임시 진단용. `?debug=1` 일 때만 뜬다. 원인 확인되면 지운다. */}
       {photo && (
         <button
           className="sign-search"
