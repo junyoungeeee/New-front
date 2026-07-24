@@ -15,7 +15,7 @@ create table if not exists public.products (
   barcode         text primary key,
   name            text not null check (length(trim(name)) > 0),
   category        text not null check (category in ('라면','과자','음료','아이스크림','커피','기타')),
-  -- 스토리지 객체 키(`8801234567890.webp`) 또는 정적 경로(`/seed/daepa-ramen.png`)
+  -- 스토리지 객체 키(`<바코드>.webp`) 또는 정적 경로(`/seed/daepa-ramen.png`)
   photo_path      text,
   photo_is_cutout boolean not null default false,
   created_at      timestamptz not null default now()
@@ -92,17 +92,17 @@ create policy "사진 올리기" on storage.objects
 -- ─────────────────────────────────────────────
 
 insert into public.products (barcode, name, category, photo_path, photo_is_cutout, created_at) values
-  ('8801234567890', '대파 육개장면', '라면', '/seed/daepa-ramen.png', true,  now() - interval '3 days'),
-  ('8801234567891', '제주 똣똣라면', '라면', '/seed/jeju-ramen.png',  true,  now() - interval '3 days')
+  ('8809778499663', '대파 육개장면', '라면', '/seed/daepa-ramen.png', true,  now() - interval '3 days'),
+  ('8801045833934', '제주 똣똣라면', '라면', '/seed/jeju-ramen.png',  true,  now() - interval '3 days')
 on conflict (barcode) do nothing;
 
 insert into public.reviews (barcode, rating, body, keywords, created_at)
 select * from (values
-  ('8801234567890', 5, E'대파 향이 진짜 진해요.\n국물이 칼칼하고 시원합니다!', array['국물이 진해요','해장용'], now() - interval '5 days'),
-  ('8801234567890', 4, E'육개장 국물에 대파가 듬뿍이라\n해장으로 딱이에요.',     array['해장용'],                 now() - interval '12 days'),
-  ('8801234567890', 5, E'면발이 쫄깃하고 대파블럭이 실해요.\n재구매 의사 100%입니다!', array['재구매'],           now() - interval '21 days'),
-  ('8801234567890', 3, E'생각보다 안 맵고 순한 편이에요.\n계란 풀어 먹으면 더 맛있어요.', array[]::text[],        now() - interval '30 days'),
-  ('8801234567891', 4, E'국물이 담백하고 깔끔해요.\n짜지 않아서 좋았습니다.',     array['가성비'],                 now() - interval '3 days'),
-  ('8801234567891', 5, E'제주 느낌 물씬 나는 맛이에요.\n선물용으로도 괜찮아요.',   array['재구매'],                 now() - interval '9 days')
+  ('8809778499663', 5, E'대파 향이 진짜 진해요.\n국물이 칼칼하고 시원합니다!', array['국물이 진해요','해장용'], now() - interval '5 days'),
+  ('8809778499663', 4, E'육개장 국물에 대파가 듬뿍이라\n해장으로 딱이에요.',     array['해장용'],                 now() - interval '12 days'),
+  ('8809778499663', 5, E'면발이 쫄깃하고 대파블럭이 실해요.\n재구매 의사 100%입니다!', array['재구매'],           now() - interval '21 days'),
+  ('8809778499663', 3, E'생각보다 안 맵고 순한 편이에요.\n계란 풀어 먹으면 더 맛있어요.', array[]::text[],        now() - interval '30 days'),
+  ('8801045833934', 4, E'국물이 담백하고 깔끔해요.\n짜지 않아서 좋았습니다.',     array['가성비'],                 now() - interval '3 days'),
+  ('8801045833934', 5, E'제주 느낌 물씬 나는 맛이에요.\n선물용으로도 괜찮아요.',   array['재구매'],                 now() - interval '9 days')
 ) as seed(barcode, rating, body, keywords, created_at)
 where not exists (select 1 from public.reviews);
