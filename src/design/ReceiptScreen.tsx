@@ -25,7 +25,11 @@ export function usePhotoScale(enabled: boolean) {
     if (!enabled) return;
     const root = document.documentElement;
     const apply = () => {
-      const frame = Math.min(window.innerWidth, PHOTO.frameMax);
+      // CSS 의 `--frame-w: min(100vw, 430px)` 와 **같은 폭**을 써야 한다.
+      // `window.innerWidth` 는 비주얼 뷰포트(핀치줌·툴바에 따라 달라지고 브라우저마다 다르다)라
+      // 100vw 와 어긋날 수 있다 — 그러면 영수증만 사진 슬롯과 다른 배율로 그려진다.
+      // `documentElement.clientWidth` 가 레이아웃 뷰포트 = 100vw 에 대응한다.
+      const frame = Math.min(document.documentElement.clientWidth, PHOTO.frameMax);
       const paper = (PHOTO.paperWidth * frame) / PHOTO.width;
       root.style.setProperty('--photo-zoom', String(paper / PHOTO.designWidth));
     };

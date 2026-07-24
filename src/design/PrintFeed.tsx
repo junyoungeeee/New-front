@@ -170,7 +170,22 @@ export function PrintFeed({
       syncFed();
     });
     observer.observe(strip);
-    return () => observer.disconnect();
+
+    // 화면 크기가 바뀌면 슬롯 선(--frame-w 기준)도 같이 움직인다. 종이 높이는 그대로일 수 있어
+    // ResizeObserver 가 안 잡는 경우가 있다 — iOS 툴바가 접혔다 펴지는 브라우저에서 실제로 그렇다.
+    // syncFed 는 0.5px 불감대가 있는 닫힌 루프라 여러 번 불려도 흔들리지 않는다.
+    const onViewportChange = () => {
+      if (!busyRef.current) syncFed();
+    };
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    window.visualViewport?.addEventListener('resize', onViewportChange);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      window.visualViewport?.removeEventListener('resize', onViewportChange);
+    };
   }, [syncFed]);
 
   // 제스처 — 아래로 스크롤(손가락 위로)이 "한 장 더", 반대가 되감기.
