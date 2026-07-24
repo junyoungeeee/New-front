@@ -11,6 +11,12 @@ const GAP = 18;
  *  참고 영상(`스크롤 느낌 복사본.mov`)의 4.0초→6.0초 구간이 정확히 한 장이다. */
 const SLIP_MS = 2000;
 
+/** 임시 진단용 집계. 터치가 브라우저에 먹히는지 본다.
+ *
+ * `cancelable:false` 로 오는 touchmove 는 브라우저가 이미 스크롤하기로 정한 것이라
+ * preventDefault 가 **아무 일도 안 한다** — 스크롤 느낌이 브라우저마다 달라지는 전형적인 원인. */
+const touchStats = { moves: 0, cancelable: 0 };
+
 /** 임시 진단용 오버레이. `?debug=1` 일 때만 그린다.
  *
  * 아이폰 Chrome 에서만 종이가 잘리는데 재현 환경이 없어, 실제 기기에서 숫자를 직접 읽으려고 둔다.
@@ -31,8 +37,10 @@ function FeedDebug({
       const strip = stripRef.current;
       const viewport = strip?.parentElement;
       if (!strip || !viewport) return;
-      const slotY =
-        viewport.getBoundingClientRect().top + parseFloat(getComputedStyle(strip).top || '0');
+      // 고정 화면이 실제로 화면 맨 위에 있는지(=툴바에 밀리지 않았는지)를 따로 본다.
+      const vpTop = viewport.getBoundingClientRect().top;
+      const slotY = vpTop + parseFloat(getComputedStyle(strip).top || '0');
+      const vv = window.visualViewport;
       const tops = [...strip.querySelectorAll('.feed-scale > div')].map((el) =>
         +(el.getBoundingClientRect().top - slotY).toFixed(1),
       );
@@ -43,10 +51,14 @@ function FeedDebug({
         [
           `clientW ${document.documentElement.clientWidth}  innerW ${window.innerWidth}`,
           `zoom ${getComputedStyle(document.documentElement).getPropertyValue('--photo-zoom').trim()}`,
+          // vpTop 이 0 이 아니면 고정 화면이 툴바/스크롤에 밀린 것 = 스크롤 느낌 차이의 정체
+          `vpTop ${vpTop.toFixed(1)}  scrollY ${window.scrollY.toFixed(1)}`,
+          `vvH ${vv ? vv.height.toFixed(1) : '-'}  vvTop ${vv ? vv.offsetTop.toFixed(1) : '-'}  vvScale ${vv ? vv.scale : '-'}  innerH ${window.innerHeight}`,
           `slotY ${slotY.toFixed(1)}  fed ${getComputedStyle(strip).getPropertyValue('--fed').trim()}`,
           `stripH ${strip.getBoundingClientRect().height.toFixed(1)}  step ${step}`,
           `tops ${tops.join(' , ')}`,
           `hs   ${heights.join(' , ')}`,
+          `touch moves ${touchStats.moves} / cancelable ${touchStats.cancelable}`,
         ].join('\n'),
       );
     };
@@ -287,6 +299,8 @@ export function PrintFeed({
     };
 
     const onTouchMove = (event: TouchEvent) => {
+      touchStats.moves += 1;
+      if (event.cancelable) touchStats.cancelable += 1;
       event.preventDefault();
       if (touchHandled) return;
       const delta = touchStart - event.touches[0].clientY;
