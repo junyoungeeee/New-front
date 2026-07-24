@@ -15,6 +15,14 @@ TestResults.xcresult/
 /*.jpeg
 /*.jpg
 /*.png
+/*.pen
+
+# 웹 앱과 무관한 소스·문서·디자인 (로컬에만 둔다)
+/NewApp/
+/design/
+/images/
+/docs/
+/tools/
 
 # 환경 변수 (키가 들어간다)
 .env

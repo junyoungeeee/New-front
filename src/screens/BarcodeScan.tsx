@@ -79,8 +79,8 @@ export function BarcodeScan() {
   }, [status.kind, pending]);
 
   function manualEntry() {
-    const code = window.prompt('바코드 번호를 입력하세요', '8801234567890')?.trim();
-    if (code) handleBarcode(code);
+    stop(); // 카메라를 놓고 넘어간다 — iOS 는 스트림을 물고 있으면 돌아왔을 때 다시 못 연다
+    navigate('/scan/manual');
   }
 
   const title =
@@ -103,7 +103,7 @@ export function BarcodeScan() {
     <ReceiptScreen scrolls={false}>
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 26 }}>
-          <ReceiptHeader title="스캔" trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
+          <ReceiptHeader title="Scan" trailingIcon="xmark" onAction={() => navigate('/', { replace: true })} />
 
           <div style={{ height: 20 }} />
           <PerforationLine />

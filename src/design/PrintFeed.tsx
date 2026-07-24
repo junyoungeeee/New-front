@@ -148,11 +148,22 @@ export function PrintFeed({
   );
 
   // 조회가 늦게 도착하거나 내용이 바뀌어 종이 뭉치 높이가 달라지면 급지량을 다시 맞춘다.
+  //
+  // 실제 높이 변화(1px 이상)에만 반응한다. syncFed 가 --fed 를 다시 쓰면 fit-content + zoom 이
+  // 재측정되면서 높이가 서브픽셀만큼 요동치는데, 그걸 그대로 받아 다시 syncFed 를 부르면
+  // ResizeObserver ↔ 레이아웃 되먹임 고리가 생긴다. 브라우저가 이걸 프레임당 한 번으로 조이니
+  // 120Hz(ProMotion) 에선 초당 120번 흔들려 "내려왔다 약간씩 위로 올라가며 끊기는" 것으로 보인다
+  // (60Hz 아이폰 13 미니에선 대개 안정점에 안착해 안 보인다). 문턱값으로 이 고리를 끊는다.
   useEffect(() => {
     const strip = stripRef.current;
     if (!strip) return;
+    let lastHeight = strip.getBoundingClientRect().height;
     const observer = new ResizeObserver(() => {
-      if (!busyRef.current) syncFed();
+      if (busyRef.current) return;
+      const height = strip.getBoundingClientRect().height;
+      if (Math.abs(height - lastHeight) < 1) return; // 서브픽셀 요동 무시 — 되먹임 고리 차단
+      lastHeight = height;
+      syncFed();
     });
     observer.observe(strip);
     return () => observer.disconnect();

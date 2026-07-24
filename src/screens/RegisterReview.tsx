@@ -110,7 +110,7 @@ export function RegisterReview() {
       <ReceiptPaper>
         <div className="pad" style={{ paddingBottom: 26 }}>
           <ReceiptHeader
-            title="리뷰"
+            title="Review"
             trailingIcon="xmark"
             onAction={() => {
               clearPendingPhoto();
