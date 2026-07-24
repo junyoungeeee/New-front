@@ -11,85 +11,6 @@ const GAP = 18;
  *  참고 영상(`스크롤 느낌 복사본.mov`)의 4.0초→6.0초 구간이 정확히 한 장이다. */
 const SLIP_MS = 2000;
 
-/** 임시 진단용 집계. 터치가 브라우저에 먹히는지 본다.
- *
- * `cancelable:false` 로 오는 touchmove 는 브라우저가 이미 스크롤하기로 정한 것이라
- * preventDefault 가 **아무 일도 안 한다** — 스크롤 느낌이 브라우저마다 달라지는 전형적인 원인. */
-const touchStats = { moves: 0, cancelable: 0 };
-
-/** 임시 진단용 오버레이. `?debug=1` 일 때만 그린다.
- *
- * 아이폰 Chrome 에서만 종이가 잘리는데 재현 환경이 없어, 실제 기기에서 숫자를 직접 읽으려고 둔다.
- * 핵심은 `tops` — 나와 있는 장의 윗변이 슬롯 선에서 몇 px 떨어져 있는가. 0 이면 급지량은 맞는
- * 것이고(=원인이 마스크·렌더링 쪽), 음수면 급지가 모자란 것이다. 원인 확인되면 이 파일에서 지운다. */
-function FeedDebug({
-  stripRef,
-  step,
-}: {
-  stripRef: React.RefObject<HTMLDivElement>;
-  step: number;
-}) {
-  const [info, setInfo] = useState<string>('');
-
-  useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('debug')) return;
-    const read = () => {
-      const strip = stripRef.current;
-      const viewport = strip?.parentElement;
-      if (!strip || !viewport) return;
-      // 고정 화면이 실제로 화면 맨 위에 있는지(=툴바에 밀리지 않았는지)를 따로 본다.
-      const vpTop = viewport.getBoundingClientRect().top;
-      const slotY = vpTop + parseFloat(getComputedStyle(strip).top || '0');
-      const vv = window.visualViewport;
-      const tops = [...strip.querySelectorAll('.feed-scale > div')].map((el) =>
-        +(el.getBoundingClientRect().top - slotY).toFixed(1),
-      );
-      const heights = [...strip.querySelectorAll('.feed-scale > div')].map((el) =>
-        +el.getBoundingClientRect().height.toFixed(1),
-      );
-      setInfo(
-        [
-          `clientW ${document.documentElement.clientWidth}  innerW ${window.innerWidth}`,
-          `zoom ${getComputedStyle(document.documentElement).getPropertyValue('--photo-zoom').trim()}`,
-          // vpTop 이 0 이 아니면 고정 화면이 툴바/스크롤에 밀린 것 = 스크롤 느낌 차이의 정체
-          `vpTop ${vpTop.toFixed(1)}  scrollY ${window.scrollY.toFixed(1)}`,
-          `vvH ${vv ? vv.height.toFixed(1) : '-'}  vvTop ${vv ? vv.offsetTop.toFixed(1) : '-'}  vvScale ${vv ? vv.scale : '-'}  innerH ${window.innerHeight}`,
-          `slotY ${slotY.toFixed(1)}  fed ${getComputedStyle(strip).getPropertyValue('--fed').trim()}`,
-          `stripH ${strip.getBoundingClientRect().height.toFixed(1)}  step ${step}`,
-          `tops ${tops.join(' , ')}`,
-          `hs   ${heights.join(' , ')}`,
-          `touch moves ${touchStats.moves} / cancelable ${touchStats.cancelable}`,
-        ].join('\n'),
-      );
-    };
-    read();
-    const id = window.setInterval(read, 400);
-    return () => window.clearInterval(id);
-  }, [stripRef, step]);
-
-  if (!info) return null;
-  return (
-    <pre
-      style={{
-        position: 'fixed',
-        left: 0,
-        bottom: 0,
-        zIndex: 9999,
-        margin: 0,
-        padding: '6px 8px',
-        maxWidth: '100vw',
-        background: 'rgba(0,0,0,0.8)',
-        color: '#4ef08a',
-        font: '10px/1.45 ui-monospace, Menlo, monospace',
-        whiteSpace: 'pre',
-        pointerEvents: 'none',
-      }}
-    >
-      {info}
-    </pre>
-  );
-}
-
 /** 종이가 프린터에서 **아래로 뽑혀 나오는** 화면.
  *
  * 일반 스크롤과 방향이 반대다. 스크롤은 종이를 위로 걷어 올리지만, 프린터는 종이를 아래로
@@ -134,11 +55,13 @@ export function PrintFeed({
 
   /** 나온 순서(k)별 위치를 잰다. DOM 은 뒤집혀 있으므로 인덱스를 되돌려 찾는다.
    *
-   * 급지량을 **높이 계산이 아니라 현재 위치와의 차이**로 구한다. 사진 모드에선 슬립만 `zoom` 으로
-   * 축소되는데, 종이 뭉치(feed-strip)는 zoom 밖이고 슬립은 zoom 안이라 두 좌표계를 섞으면
-   * (stripHeight − topOf) 가 배율만큼 어긋난다 — 쉴 때도 맨 위 장의 윗부분(사진)이 슬롯에 잘려
-   * 있던 원인이다. 반면 "지금 이 장의 윗변이 화면 어디에 있나"와 "슬롯 선이 화면 어디인가"는
-   * 둘 다 실제 렌더 픽셀이라 배율과 무관하게 맞는다. 급지량을 그 차이만큼 옮기면 끝. */
+   * 급지량을 **높이 계산이 아니라 현재 위치와의 차이**로 구한다. "지금 이 장의 윗변이 화면 어디에
+   * 있나"와 "슬롯 선이 화면 어디인가"의 차이만큼 옮기면 되고, 급지량을 δ 만큼 바꾸면 종이도 정확히
+   * δ 만큼 움직이므로(strip 의 translateY) 한 번에 맞는다. 높이를 더하고 빼는 방식과 달리 기준선에
+   * 어떤 오차가 있어도 스스로 수렴한다.
+   *
+   * 슬립 축소에 `zoom` 을 쓰면 안 되는 이유는 styles.css 의 `.feed-scale` 주석 참고 —
+   * zoom 안쪽 요소의 rect 는 브라우저마다 좌표계가 달라 이 계산이 Chrome 에서만 어긋났다. */
   const measure = useCallback(() => {
     const strip = stripRef.current;
     const viewport = strip?.parentElement;
@@ -232,7 +155,7 @@ export function PrintFeed({
 
   // 조회가 늦게 도착하거나 내용이 바뀌어 종이 뭉치 높이가 달라지면 급지량을 다시 맞춘다.
   //
-  // 실제 높이 변화(1px 이상)에만 반응한다. syncFed 가 --fed 를 다시 쓰면 fit-content + zoom 이
+  // 실제 높이 변화(1px 이상)에만 반응한다. syncFed 가 --fed 를 다시 쓰면 fit-content 폭이
   // 재측정되면서 높이가 서브픽셀만큼 요동치는데, 그걸 그대로 받아 다시 syncFed 를 부르면
   // ResizeObserver ↔ 레이아웃 되먹임 고리가 생긴다. 브라우저가 이걸 프레임당 한 번으로 조이니
   // 120Hz(ProMotion) 에선 초당 120번 흔들려 "내려왔다 약간씩 위로 올라가며 끊기는" 것으로 보인다
@@ -299,8 +222,6 @@ export function PrintFeed({
     };
 
     const onTouchMove = (event: TouchEvent) => {
-      touchStats.moves += 1;
-      if (event.cancelable) touchStats.cancelable += 1;
       event.preventDefault();
       if (touchHandled) return;
       const delta = touchStart - event.touches[0].clientY;
@@ -358,8 +279,6 @@ export function PrintFeed({
       {!photo && <PrinterLip />}
       {/* 제목은 사진의 핑크 슬롯 위에 검정 글씨로 얹는다 — 종이가 아니라 기계에 붙는다. */}
       {photo && label && <div className="photo-feed-label">{label}</div>}
-      <FeedDebug stripRef={stripRef} step={step} />
-      {/* ↑ 임시 진단용. `?debug=1` 일 때만 뜬다. 원인 확인되면 지운다. */}
       {photo && (
         <button
           className="sign-search"
